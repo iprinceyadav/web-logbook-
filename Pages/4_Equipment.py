@@ -94,9 +94,12 @@ with tab1:
                     return "Expired"
                 elif days <= 10:
                     return "Urgent"
-                else:
+                elif days <= 30:
                     return "Incoming"
+                else:
+                    return "Other"
             df["DueCategory"] = df["DaysToDue"].apply(due_category)
+            # Only keep Urgent, Incoming, Expired for the chart
             cat_counts = df["DueCategory"].value_counts().reindex(["Urgent", "Incoming", "Expired"], fill_value=0)
             cat_df = pd.DataFrame({"Category": cat_counts.index, "Equipment Count": cat_counts.values})
             color_map = {"Incoming": "green", "Urgent": "orange", "Expired": "red"}

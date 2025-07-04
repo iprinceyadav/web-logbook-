@@ -36,7 +36,7 @@ def add_meeting():
     col0, col1, col2, col3 = st.columns(4)
     with col0:
         team_name = st.selectbox("Team Name", team_names)
-        audit_level = st.selectbox("Audit Level", ["L1 audit", "L2 audit", "L3 audit", "Monthly"])
+        audit_level = st.selectbox("Audit Level", ["L1 audit", "L2 audit", "L3 audit", "Monthly","Other"])
     with col1:
         point_of_discussion = st.text_area("Point of discussion")
         severity = st.selectbox("Severity (High/Low)", ["High", "Low"])

@@ -25,7 +25,26 @@ else:
     ])
 
 # Tabs
-tab1, tab2 = st.tabs(["➕ Add Entry", "📋 View Records"])
+tab1, tab2, tab_analytics = st.tabs(["➕ Add Entry", "📋 View Records", "📊 Analytics"])
+
+# ========== Analytics Tab ==========
+with tab_analytics:
+    st.subheader("Month-wise Training Due Date Count")
+    if not df.empty and "Due date" in df.columns:
+        df["Due date"] = pd.to_datetime(df["Due date"], errors="coerce")
+        df_valid = df.dropna(subset=["Due date"])
+        if not df_valid.empty:
+            df_valid["MonthYear"] = df_valid["Due date"].dt.strftime("%b %Y")
+            monthyear_counts = df_valid["MonthYear"].value_counts().sort_index()
+            monthyear_df = pd.DataFrame({"MonthYear": monthyear_counts.index, "Due Count": monthyear_counts.values})
+            import plotly.express as px
+            fig = px.bar(monthyear_df, x="MonthYear", y="Due Count", title="Month-wise Training Due Date Count", text=monthyear_df['Due Count'], color="Due Count", color_continuous_scale="Blues")
+            fig.update_traces(textfont_size=20, texttemplate='%{text:.0f}')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No valid due dates found for analytics.")
+    else:
+        st.info("No data or 'Due date' column not found.")
 
 # ========== Tab 1 ==========
 with tab1:
@@ -59,8 +78,8 @@ with tab1:
                 safe_name = name.replace(" ", "_")
                 safe_role = role.replace(" ", "_")
                 safe_agency = agency.replace(" ", "_")
-                safe_due = str(due_date).replace("-", "_")
-                new_filename = f"{safe_name}_{safe_role}_{safe_agency}_{safe_due}{extension}"
+                safe_due = str(due_date).replace("-", "")  # Format as YYYYMMDD
+                new_filename = f"{safe_name}_{safe_role}_{safe_due}_{safe_agency}{extension}"
 
                 # Save file
                 cert_path = os.path.join(UPLOAD_DIR, new_filename)
@@ -122,7 +141,8 @@ with tab2:
             cols[5].write(row["Agency"])
 
             cert_path = row["Certificate Link"]
-            if os.path.exists(cert_path):
+            # Only check if cert_path is a valid string and not NaN/float
+            if isinstance(cert_path, str) and cert_path and os.path.exists(cert_path):
                 with open(cert_path, "rb") as file:
                     file_data = file.read()
                     file_name = os.path.basename(cert_path)

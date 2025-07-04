@@ -21,12 +21,11 @@ st.title("📈 Interactive Analytical Dashboard")  # Removed duplicate main head
 # Load data
 df_meeting = load_meeting_data()
 
-# --- Display all three charts in a single row, bar chart wider ---
-col1, col2, col3 = st.columns([2, 1, 1])
+# --- Display all three charts: bar chart on left, two pie charts stacked on right ---
+col1, col2 = st.columns([2, 1])
 
 # 1. Team Name-wise Meeting Count Bar Graph
 with col1:
-    #st.markdown('<span style="font-size:15px;font-weight:600;">Team Name-wise Meeting Count</span>', unsafe_allow_html=True)
     if not df_meeting.empty and "Team Name" in df_meeting.columns:
         team_counts = df_meeting["Team Name"].value_counts().reset_index()
         team_counts.columns = ["Team Name", "Meeting Count"]
@@ -35,9 +34,9 @@ with col1:
     else:
         st.warning("No meeting data or 'Team Name' column not found.")
 
-# 2. Status Pie Chart
+# 2 & 3. Pie Charts stacked vertically
 with col2:
-    #st.markdown('<span style="font-size:15px;font-weight:600;">Meeting Status Distribution</span>', unsafe_allow_html=True)
+    # Status Pie Chart
     if not df_meeting.empty and "Status (Done/Pending)" in df_meeting.columns:
         status_counts = df_meeting["Status (Done/Pending)"].value_counts().reset_index()
         status_counts.columns = ["Status (Done/Pending)", "Count"]
@@ -45,10 +44,8 @@ with col2:
         st.plotly_chart(fig2, use_container_width=True)
     else:
         st.warning("No meeting data or 'Status (Done/Pending)' column not found.")
-
-# 3. Severity Pie Chart for Pending Meetings
-with col3:
-    #st.markdown('<span style="font-size:15px;font-weight:600;">Severity Distribution for Pending Meetings</span>', unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)  # Small gap
+    # Severity Pie Chart for Pending Meetings
     if not df_meeting.empty and "Status (Done/Pending)" in df_meeting.columns and "Severity (High/Low)" in df_meeting.columns:
         pending_meetings = df_meeting[df_meeting["Status (Done/Pending)"].str.lower() == "pending"]
         if not pending_meetings.empty:
@@ -106,7 +103,16 @@ if not df_meeting.empty and "Target date" in df_meeting.columns and "Severity (H
         stacked_counts = pending_df.groupby(["TargetDateStr", "Severity (High/Low)"]).size().reset_index(name="Count")
         stacked_counts = stacked_counts.sort_values(["TargetDateStr", "Severity (High/Low)"])
         import plotly.express as px
-        fig_stacked = px.bar(stacked_counts, x="TargetDateStr", y="Count", color="Severity (High/Low)", barmode="stack", title=f"Pending Responsibility Count for {selected_person} by Due Date ({selected_team}, {selected_fy}) (Stacked by Severity)")
+        severity_color_map = {"Low": "#7ec8e3", "High": "#003366"}  # Low: light blue, High: dark blue
+        fig_stacked = px.bar(
+            stacked_counts,
+            x="TargetDateStr",
+            y="Count",
+            color="Severity (High/Low)",
+            barmode="stack",
+            title=f"Pending Responsibility Count for {selected_person} by Due Date ({selected_team}, {selected_fy}) (Stacked by Severity)",
+            color_discrete_map=severity_color_map
+        )
         fig_stacked.update_xaxes(title="Pending Due Date")
         st.plotly_chart(fig_stacked, use_container_width=True)
     else:
@@ -114,6 +120,49 @@ if not df_meeting.empty and "Target date" in df_meeting.columns and "Severity (H
 else:
     st.info("No pending responsibilities with valid target dates, severity, or person found for stacked chart.")
 
+# --- Attendance Present Count by Member (Team & Year) ---
+import datetime
+ATTENDANCE_RECORDS_PATH = os.path.join("data", "processed", "Database", "attendance_records.csv")
+
+st.markdown('<span style="font-size:15px;font-weight:600;">Attendance Present Count by Member</span>', unsafe_allow_html=True)
+try:
+    att_df = pd.read_csv(ATTENDANCE_RECORDS_PATH)
+except Exception:
+    att_df = pd.DataFrame(columns=["Date", "Team Name", "Names", "Status"])
+
+if not att_df.empty and "Team Name" in att_df.columns and "Date" in att_df.columns and "Names" in att_df.columns and "Status" in att_df.columns:
+    att_df["Date"] = pd.to_datetime(att_df["Date"], errors="coerce")
+    att_df = att_df.dropna(subset=["Date"])  # Remove rows with invalid dates
+    att_df["Year"] = att_df["Date"].apply(lambda x: x.year if x.month >= 4 else x.year - 1)
+    att_df["FY"] = att_df["Year"].astype(str) + "-" + (att_df["Year"]+1).astype(str)
+
+    team_options_att = sorted(att_df["Team Name"].dropna().unique())
+    fy_options_att = sorted(att_df["FY"].unique(), reverse=True)
+
+    filter_col1_att, filter_col2_att = st.columns([1,1])
+    with filter_col1_att:
+        st.markdown('<span style="font-size:13px;font-weight:500;">Team Name</span>', unsafe_allow_html=True)
+        selected_team_att = st.selectbox(" ", team_options_att, key="team_select_att", label_visibility="collapsed")
+    with filter_col2_att:
+        st.markdown('<span style="font-size:13px;font-weight:500;">Financial Year (April-March)</span>', unsafe_allow_html=True)
+        selected_fy_att = st.selectbox(" ", fy_options_att, key="fy_select_att", label_visibility="collapsed")
+
+    filtered_att = att_df[(att_df["Team Name"] == selected_team_att) & (att_df["FY"] == selected_fy_att) & (att_df["Status"].str.lower() == "present")]
+
+    # Explode the 'Names' column to get one row per present member
+    filtered_att = filtered_att.copy()
+    filtered_att["Names"] = filtered_att["Names"].str.split(",")
+    exploded_att = filtered_att.explode("Names")
+    exploded_att["Names"] = exploded_att["Names"].str.strip()
+    present_counts = exploded_att["Names"].value_counts().reset_index()
+    present_counts.columns = ["Member Name", "Present Count"]
+
+    fig_present = px.bar(present_counts, x="Member Name", y="Present Count", title=f"Present Count by Member for {selected_team_att} ({selected_fy_att})")
+    st.plotly_chart(fig_present, use_container_width=True)
+else:
+    st.info("Attendance records, Team Name, Date, or Names column not found for attendance present count graph.")
+
 # --- Footer ---
 st.markdown("---")
 st.write("© 2025 Analytical Dashboard. Developed by Prince :(")
+
