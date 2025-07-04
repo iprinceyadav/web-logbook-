@@ -7,7 +7,7 @@ from pathlib import Path
 import urllib.parse
 
 # Constants
-CSV_FILE = "entrant_attendant_data.csv"
+CSV_FILE = "data/processed/Database/entrant_attendant_data.csv"
 UPLOAD_DIR = "certificates"
 
 st.set_page_config(page_title="Entrant Attendant Card Form", layout="wide")
