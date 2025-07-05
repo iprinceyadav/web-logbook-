@@ -58,67 +58,70 @@ with col2:
     else:
         st.warning("No meeting data or required columns ('Status (Done/Pending)', 'Severity (High/Low)') not found.")
 
-# --- Team Name & Year Filter for FY Person-wise Responsibility Count ---
-st.markdown('<span style="font-size:15px;font-weight:600;">Person-wise Responsibility Count</span>', unsafe_allow_html=True)
-if not df_meeting.empty and "Team Name" in df_meeting.columns and "Target date" in df_meeting.columns and "Responsibility" in df_meeting.columns:
-    df_meeting["Target date"] = pd.to_datetime(df_meeting["Target date"], errors="coerce")
-    df_meeting = df_meeting.dropna(subset=["Target date"])  # Remove rows with invalid dates
-    df_meeting["Year"] = df_meeting["Target date"].apply(lambda x: x.year if x.month >= 4 else x.year - 1)
-    df_meeting["FY"] = df_meeting["Year"].astype(str) + "-" + (df_meeting["Year"]+1).astype(str)
+# --- Person-wise Responsibility Count and Pending Responsibility Count (side by side) ---
+row_col1, row_col2 = st.columns(2)
 
-    team_options = sorted(df_meeting["Team Name"].dropna().unique())
-    fy_options = sorted(df_meeting["FY"].unique(), reverse=True)
+with row_col1:
+    st.markdown('<span style="font-size:15px;font-weight:600;">Person-wise Responsibility Count</span>', unsafe_allow_html=True)
+    if not df_meeting.empty and "Team Name" in df_meeting.columns and "Target date" in df_meeting.columns and "Responsibility" in df_meeting.columns:
+        df_meeting["Target date"] = pd.to_datetime(df_meeting["Target date"], errors="coerce")
+        df_meeting = df_meeting.dropna(subset=["Target date"])  # Remove rows with invalid dates
+        df_meeting["Year"] = df_meeting["Target date"].apply(lambda x: x.year if x.month >= 4 else x.year - 1)
+        df_meeting["FY"] = df_meeting["Year"].astype(str) + "-" + (df_meeting["Year"]+1).astype(str)
 
-    filter_col1, filter_col2 = st.columns([1,1])
-    with filter_col1:
-        st.markdown('<span style="font-size:13px;font-weight:500;">Team Name</span>', unsafe_allow_html=True)
-        selected_team = st.selectbox(" ", team_options, key="team_select", label_visibility="collapsed")
-    with filter_col2:
-        st.markdown('<span style="font-size:13px;font-weight:500;">Financial Year (April-March)</span>', unsafe_allow_html=True)
-        selected_fy = st.selectbox(" ", fy_options, key="fy_select", label_visibility="collapsed")
+        team_options = sorted(df_meeting["Team Name"].dropna().unique())
+        fy_options = sorted(df_meeting["FY"].unique(), reverse=True)
 
-    filtered = df_meeting[(df_meeting["Team Name"] == selected_team) & (df_meeting["FY"] == selected_fy)]
+        filter_col1, filter_col2 = st.columns([1,1])
+        with filter_col1:
+            st.markdown('<span style="font-size:13px;font-weight:500;">Team Name</span>', unsafe_allow_html=True)
+            selected_team = st.selectbox(" ", team_options, key="team_select", label_visibility="collapsed")
+        with filter_col2:
+            st.markdown('<span style="font-size:13px;font-weight:500;">Financial Year (April-March)</span>', unsafe_allow_html=True)
+            selected_fy = st.selectbox(" ", fy_options, key="fy_select", label_visibility="collapsed")
 
-    # Group by Responsibility, count occurrences
-    resp_counts = filtered["Responsibility"].value_counts().reset_index()
-    resp_counts.columns = ["Responsibility", "Count"]
+        filtered = df_meeting[(df_meeting["Team Name"] == selected_team) & (df_meeting["FY"] == selected_fy)]
 
-    fig_fy = px.bar(resp_counts, x="Responsibility", y="Count", title=f"Person-wise Responsibility Count for {selected_team} ({selected_fy})")
-    st.plotly_chart(fig_fy, use_container_width=True)
-else:
-    st.info("Meeting data, Team Name, Responsibility, or Target date column not found.")
+        # Group by Responsibility, count occurrences
+        resp_counts = filtered["Responsibility"].value_counts().reset_index()
+        resp_counts.columns = ["Responsibility", "Count"]
 
-# --- Stacked Bar Chart: Pending Responsibility Count for Selected Person (Stacked by Severity, by Due Date) ---
-st.markdown('<span style="font-size:15px;font-weight:600;">Pending Responsibility Count for Selected Person by Due Date (Stacked by Severity)</span>', unsafe_allow_html=True)
-if not df_meeting.empty and "Target date" in df_meeting.columns and "Severity (High/Low)" in df_meeting.columns and "Responsibility" in df_meeting.columns and "Team Name" in df_meeting.columns:
-    # Use the same selected_team and selected_fy as above
-    person_options = sorted(filtered["Responsibility"].dropna().unique())
-    if person_options:
-        selected_person = st.selectbox("Select Responsible Person", person_options, key="pending_person_select")
-        pending_df = filtered[(filtered["Responsibility"] == selected_person) & (filtered["Target date"] > pd.Timestamp(pd.Timestamp.now().date()))].copy()
-        pending_df["Target date"] = pd.to_datetime(pending_df["Target date"], errors="coerce")
-        pending_df = pending_df.dropna(subset=["Target date"])  # Remove rows with invalid dates
-        pending_df["TargetDateStr"] = pending_df["Target date"].dt.strftime("%Y-%m-%d")
-        # Group by due date and severity for this person
-        stacked_counts = pending_df.groupby(["TargetDateStr", "Severity (High/Low)"]).size().reset_index(name="Count")
-        stacked_counts = stacked_counts.sort_values(["TargetDateStr", "Severity (High/Low)"])
-        import plotly.express as px
-        severity_color_map = {"Low": "#7ec8e3", "High": "#003366"}  # Low: light blue, High: dark blue
-        fig_stacked = px.bar(
-            stacked_counts,
-            x="TargetDateStr",
-            y="Count",
-            color="Severity (High/Low)",
-            barmode="stack",
-            title=f"Pending Responsibility Count for {selected_person} by Due Date ({selected_team}, {selected_fy}) (Stacked by Severity)",
-            color_discrete_map=severity_color_map
-        )
-        fig_stacked.update_xaxes(title="Pending Due Date")
-        st.plotly_chart(fig_stacked, use_container_width=True)
+        fig_fy = px.bar(resp_counts, x="Responsibility", y="Count", title=f"Person-wise Responsibility Count for {selected_team} ({selected_fy})")
+        st.plotly_chart(fig_fy, use_container_width=True)
     else:
-        st.info("No responsible persons found for the selected team and year.")
-else:
-    st.info("No pending responsibilities with valid target dates, severity, or person found for stacked chart.")
+        st.info("Meeting data, Team Name, Responsibility, or Target date column not found.")
+
+with row_col2:
+    st.markdown('<span style="font-size:15px;font-weight:600;">Pending Responsibility Count for Selected Person by Due Date (Stacked by Severity)</span>', unsafe_allow_html=True)
+    if not df_meeting.empty and "Target date" in df_meeting.columns and "Severity (High/Low)" in df_meeting.columns and "Responsibility" in df_meeting.columns and "Team Name" in df_meeting.columns:
+        # Use the same selected_team and selected_fy as above
+        person_options = sorted(filtered["Responsibility"].dropna().unique())
+        if person_options:
+            selected_person = st.selectbox("Select Responsible Person", person_options, key="pending_person_select")
+            pending_df = filtered[(filtered["Responsibility"] == selected_person) & (filtered["Target date"] > pd.Timestamp(pd.Timestamp.now().date()))].copy()
+            pending_df["Target date"] = pd.to_datetime(pending_df["Target date"], errors="coerce")
+            pending_df = pending_df.dropna(subset=["Target date"])  # Remove rows with invalid dates
+            pending_df["TargetDateStr"] = pending_df["Target date"].dt.strftime("%Y-%m-%d")
+            # Group by due date and severity for this person
+            stacked_counts = pending_df.groupby(["TargetDateStr", "Severity (High/Low)"]).size().reset_index(name="Count")
+            stacked_counts = stacked_counts.sort_values(["TargetDateStr", "Severity (High/Low)"])
+            import plotly.express as px
+            severity_color_map = {"Low": "#7ec8e3", "High": "#003366"}  # Low: light blue, High: dark blue
+            fig_stacked = px.bar(
+                stacked_counts,
+                x="TargetDateStr",
+                y="Count",
+                color="Severity (High/Low)",
+                barmode="stack",
+                title=f"Pending Responsibility Count for {selected_person} by Due Date ({selected_team}, {selected_fy}) (Stacked by Severity)",
+                color_discrete_map=severity_color_map
+            )
+            fig_stacked.update_xaxes(title="Pending Due Date")
+            st.plotly_chart(fig_stacked, use_container_width=True)
+        else:
+            st.info("No responsible persons found for the selected team and year.")
+    else:
+        st.info("No pending responsibilities with valid target dates, severity, or person found for stacked chart.")
 
 # --- Attendance Present Count by Member (Team & Year) ---
 import datetime
